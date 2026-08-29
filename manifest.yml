@@ -1,0 +1,14 @@
+entranceAssembly: ClassIsland.DutyRoster.dll
+name: 值日提醒
+id: gordon.dutyroster
+description: 到点主动弹出值日安排，人名用大字显示，超时自动关闭。日常时间点用卡片，大扫除整屏提醒。值日表为纯文本，一行一个时间点。
+version: 1.0.0.0
+apiVersion: 2.0.0.0
+author: GordonYoung
+icon: icon.png
+url: https://github.com/Gordonynh/DutyRoster
+readme: README.md
+supportedOSPlatforms:
+  - Windows
+  - Linux
+  - OSX

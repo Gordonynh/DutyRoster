@@ -1,0 +1,207 @@
+<ci:SettingsPageBase xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:ci="http://classisland.tech/schemas/xaml/core"
+                     xmlns:controls="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
+                     xmlns:shared="using:ClassIsland.PluginShared"
+                     x:Class="ClassIsland.DutyRoster.Views.DutySettingsPage">
+    <ScrollViewer>
+        <StackPanel Classes="settings-container animated-intro">
+
+            <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                       Text="值日表为纯文本，记事本即可编辑，保存后自动生效。到点自动弹出，超时自动关闭，点击屏幕也可关闭。"/>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE8A5;" Text="值日表" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A5;}"
+                                       Header="值日表文件"
+                                       Description="{Binding RosterSummary}">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Click="OnOpenRoster">
+                            <ci:IconText Glyph="&#xE8E5;" Text="打开"/>
+                        </Button>
+                        <Button Click="OnReload">
+                            <ci:IconText Glyph="&#xE117;" Text="重新载入"/>
+                        </Button>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE7BA;}"
+                                       Header="值日表存在错误"
+                                       IsVisible="{Binding HasWarnings}"
+                                       Description="{Binding WarningText}"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE787;}"
+                                       Header="今天的安排"
+                                       Description="{Binding TodaySummary}">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Click="OnPreviewCard">
+                            <ci:IconText Glyph="&#xE7B3;" Text="试弹卡片"/>
+                        </Button>
+                        <Button Click="OnPreviewSweep">
+                            <ci:IconText Glyph="&#xE7B3;" Text="试弹整屏"/>
+                        </Button>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xEA8F;" Text="提醒" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xEA8F;}"
+                                       Header="启用值日提醒">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.IsEnabled, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE823;}"
+                                       Header="提前提醒"
+                                       Description="提前几分钟提醒。0 为准点。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="0" Maximum="15" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.LeadMinutes, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.LeadMinutes, StringFormat='{}{0} 分钟'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                       Header="弹窗停留"
+                                       Description="超时自动关闭，点击屏幕立即关闭。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="3" Maximum="120" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.HoldSeconds, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.HoldSeconds, StringFormat='{}{0} 秒'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE823;}"
+                                       Header="触发延迟"
+                                       Description="到点后延迟几秒弹出，避开铃声。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="0" Maximum="60" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.FireDelaySeconds, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding Settings.FireDelaySeconds, StringFormat='{}{0} 秒'}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE767;}"
+                                       Header="弹窗提示音">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.PlaySound, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE8A9;" Text="提醒形式" Margin="0 0 0 4"/>
+
+            <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                       Text="日常时间点与大扫除可分别设置提醒形式。含「扫地」「拖地」的时间点判定为大扫除。"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A9;}"
+                                       Header="日常提醒形式"
+                                       Description="擦黑板、倒垃圾等常规安排。">
+                <controls:SettingsExpander.Footer>
+                    <ComboBox MinWidth="170" SelectedIndex="{Binding FrequentStyleIndex, Mode=TwoWay}">
+                        <ComboBoxItem>卡片浮窗</ComboBoxItem>
+                        <ComboBoxItem>整屏 UltraCode</ComboBoxItem>
+                        <ComboBoxItem>只发 ClassIsland 提醒</ComboBoxItem>
+                        <ComboBoxItem>不提醒</ComboBoxItem>
+                    </ComboBox>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE74D;}"
+                                       Header="大扫除提醒形式"
+                                       Description="全班扫除。默认整屏提醒。">
+                <controls:SettingsExpander.Footer>
+                    <ComboBox MinWidth="170" SelectedIndex="{Binding SweepStyleIndex, Mode=TwoWay}">
+                        <ComboBoxItem>卡片浮窗</ComboBoxItem>
+                        <ComboBoxItem>整屏 UltraCode</ComboBoxItem>
+                        <ComboBoxItem>只发 ClassIsland 提醒</ComboBoxItem>
+                        <ComboBoxItem>不提醒</ComboBoxItem>
+                    </ComboBox>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE71C;}"
+                                       Header="哪些项目算大扫除"
+                                       Description="{Binding SweepSummary}">
+                <shared:TokenListEditor x:Name="SweepProjectsEditor"/>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE80A;}"
+                                       Header="整屏动画颗粒"
+                                       Description="仅影响整屏提醒。调大可降低性能占用，颗粒更粗。">
+                <controls:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Slider Width="170" Minimum="3" Maximum="40" TickFrequency="1"
+                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                Value="{Binding Settings.SweepCellSize, Mode=TwoWay}"/>
+                        <TextBlock VerticalAlignment="Center" MinWidth="54"
+                                   Text="{Binding SweepCellText}"/>
+                    </StackPanel>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8D2;}"
+                                       Header="整屏提醒的大标题">
+                <controls:SettingsExpander.Footer>
+                    <TextBox MinWidth="220" Text="{Binding Settings.SweepTitle, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE7F4;" Text="外观" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE7F4;}"
+                                       Header="弹窗位置">
+                <controls:SettingsExpander.Footer>
+                    <ComboBox MinWidth="150" SelectedIndex="{Binding PlacementIndex, Mode=TwoWay}">
+                        <ComboBoxItem>屏幕正中</ComboBoxItem>
+                        <ComboBoxItem>顶部居中</ComboBoxItem>
+                        <ComboBoxItem>右下角</ComboBoxItem>
+                    </ComboBox>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A9;}"
+                                       Header="弹窗大小">
+                <controls:SettingsExpander.Footer>
+                    <ComboBox MinWidth="150" SelectedIndex="{Binding ScaleIndex, Mode=TwoWay}">
+                        <ComboBoxItem>紧凑</ComboBoxItem>
+                        <ComboBoxItem>标准</ComboBoxItem>
+                        <ComboBoxItem>大</ComboBoxItem>
+                    </ComboBox>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+            <Separator Margin="0 12 0 4"/>
+            <ci:IconText Glyph="&#xE91C;" Text="其他通道" Margin="0 0 0 4"/>
+
+            <controls:SettingsExpander IconSource="{ci:FluentIconSource &#xE91C;}"
+                                       Header="同时发送 ClassIsland 提醒"
+                                       Description="主界面提醒空间有限，仅作补充。">
+                <controls:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.AlsoSendClassIslandNotification, Mode=TwoWay}"/>
+                </controls:SettingsExpander.Footer>
+            </controls:SettingsExpander>
+
+        </StackPanel>
+    </ScrollViewer>
+</ci:SettingsPageBase>
