@@ -30,6 +30,9 @@ namespace ClassIsland.DutyRoster.Services;
 /// 设计上刻意迁就手改：<c>#</c> 开头是注释、空行随便加、
 /// 中英文标点都认（<c>：:</c> 和 <c>；;</c>）、人名之间空格顿号逗号都行。
 /// 解析不了的行不会让整张表失败，只记一条警告，方便在设置页里指出来。
+/// <para/>
+/// 时间有两种写法：<c>08:40</c> 是单时刻（弹一下，按停留秒数消失），
+/// <c>08:40-08:50</c> 是时间段（一直显示到 08:50）。分隔符 <c>- – — ~</c> 都认。
 /// </remarks>
 public static class DutyRosterParser
 {
@@ -140,15 +143,35 @@ public static class DutyRosterParser
                 continue;
             }
 
-            // 结束时间解析得到但**故意不用**：提醒只发生在开始那一刻。
-            // 之所以还认这个写法，是为了让从旧数据转过来的 08:40-08:50 直接能用。
+            // 结束时间是可选的：没有就是单时刻，提醒按「停留秒数」自己消失。
+            TimeSpan? end = null;
+            var endText = slotMatch.Groups["end"].Value;
+            if (endText.Length > 0)
+            {
+                if (!TryParseTime(endText, out var parsedEnd))
+                {
+                    schedule.Warnings.Add($"第 {lineNumber} 行的结束时间无效，已按单时刻处理：{endText}");
+                }
+                else if (parsedEnd <= start)
+                {
+                    // 跨午夜的写法（比如 23:50-00:10）在这套「只排一天」的模型里表达不了，
+                    // 负的时长还会让定时器直接抛异常，所以退回单时刻——只警告，不废掉整行。
+                    schedule.Warnings.Add(
+                        $"第 {lineNumber} 行的结束时间不晚于开始时间，已按单时刻处理：{start:hh\\:mm}-{parsedEnd:hh\\:mm}");
+                }
+                else
+                {
+                    end = parsedEnd;
+                }
+            }
+
             var items = ParseItems(slotMatch.Groups["body"].Value, lineNumber, schedule.Warnings);
             if (items.Count == 0)
             {
                 continue;
             }
 
-            var slot = new DutySlot(start, items);
+            var slot = new DutySlot(start, end, items);
             foreach (var day in currentDays)
             {
                 if (!group.Days.TryGetValue(day, out var list))

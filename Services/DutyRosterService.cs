@@ -37,8 +37,24 @@ public class DutyRosterService : IHostedService
     private NotificationRequest? _lastRequest;
 
     /// <summary>已经提醒过的时间点，避免同一个点重复弹。跨天时清空。</summary>
+    /// <remarks>
+    /// 键是开始时间。同一个开始时间只弹一次就够——同一分钟的多个项目在表里本来就该写成同一个时间点，
+    /// 真写成两个时间点（不同项目）时，弹窗也只有一块地方，后一个替换前一个是正常的。
+    /// </remarks>
     private readonly HashSet<TimeSpan> _firedToday = [];
     private DateTime _firedDate = DateTime.MinValue;
+
+    /// <summary>
+    /// 正在显示的时间段：（开始时间，结束时间）。
+    /// </summary>
+    /// <remarks>
+    /// 用列表而不是 <c>Dictionary&lt;TimeSpan, TimeSpan&gt;</c>：值日表里同一分钟写两条不同项目是合法的，
+    /// 用字典做键的话后一条会把前一条覆盖掉，那个时间段的关窗就丢了。
+    /// <para/>
+    /// 到 End 时只关「为这个时间段开的」那个窗——靠 <c>IsShowing(start)</c> 比对，
+    /// 免得用户手动关掉以后又被顺手收掉一条无关的提醒。
+    /// </remarks>
+    private readonly List<(TimeSpan Start, TimeSpan End)> _activeRanges = [];
 
     public DutyRosterService(string pluginConfigFolder)
     {
@@ -71,6 +87,9 @@ public class DutyRosterService : IHostedService
         Reload();
         StartWatching();
 
+        // 防抖定时器要在 UI 线程上建，才能挂在 UI 的 Dispatcher 上。
+        Dispatcher.UIThread.Post(EnsureReloadDebounce, DispatcherPriority.Background);
+
         _timer.Tick += (_, _) => Tick();
         Dispatcher.UIThread.Post(() => _timer.Start(), DispatcherPriority.Background);
         return Task.CompletedTask;
@@ -81,6 +100,7 @@ public class DutyRosterService : IHostedService
         _timer.Stop();
         Dispatcher.UIThread.Post(() =>
         {
+            _reloadDebounce?.Stop();
             DutyPopupWindow.CloseCurrent();
             DutySweepWindow.CloseCurrent();
         });
@@ -151,9 +171,37 @@ public class DutyRosterService : IHostedService
 
     private void OnFileTouched(object sender, FileSystemEventArgs e)
     {
-        // 记事本保存会连着触发好几次，稍等一下再读，顺便避开写入未完成的时刻。
-        Thread.Sleep(150);
-        Dispatcher.UIThread.Post(Reload);
+        // 记事本保存会连着触发好几次，还会在文件真正写完之前就来通知。
+        // 这里不能用 Thread.Sleep：这是 watcher 的线程池回调，堵住它只是白占一个线程，
+        // 阻塞期间后续事件还会排队甚至被丢掉。改成重置一个防抖定时器，安静下来才读。
+        Dispatcher.UIThread.Post(() =>
+        {
+            _reloadDebounce?.Stop();
+            _reloadDebounce?.Start();
+        });
+    }
+
+    /// <summary>
+    /// 值日表文件变动后的防抖定时器：每次事件都重置，静默 300ms 才真正重读。
+    /// </summary>
+    /// <remarks>
+    /// 必须在 UI 线程上用——<see cref="DispatcherTimer"/> 绑定创建时的那个 Dispatcher。
+    /// </remarks>
+    private DispatcherTimer? _reloadDebounce;
+
+    private void EnsureReloadDebounce()
+    {
+        if (_reloadDebounce is not null)
+        {
+            return;
+        }
+
+        _reloadDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _reloadDebounce.Tick += (_, _) =>
+        {
+            _reloadDebounce?.Stop();
+            Reload();
+        };
     }
 
     private void DisposeWatcher()
@@ -188,6 +236,7 @@ public class DutyRosterService : IHostedService
         {
             _firedDate = now.Date;
             _firedToday.Clear();
+            _activeRanges.Clear();
         }
 
         var slots = _schedule.SlotsOn(now.Date);
@@ -197,11 +246,13 @@ public class DutyRosterService : IHostedService
         }
 
         // 提前分钟数（往前）和触发延迟秒数（往后）一起折算到「现在等于表上的几点」。
-        // 延迟默认 10 秒：原始值日表里写的就是 08:40:10 这种带偏移的时间，
-        // 铃响完、人坐定了再弹，比掐着整点弹更合适。
+        // 延迟默认 26 秒：表里写的是整分钟的下课点，铃响完、人站起来了再提醒，
+        // 比掐着整点弹更容易被真的看见。
         var lead = TimeSpan.FromMinutes(Math.Max(0, settings.LeadMinutes));
         var delay = TimeSpan.FromSeconds(Math.Max(0, settings.FireDelaySeconds));
         var target = now.TimeOfDay + lead - delay;
+
+        LeaveFinishedRanges(target);
 
         foreach (var slot in slots)
         {
@@ -219,9 +270,77 @@ public class DutyRosterService : IHostedService
             }
 
             _firedToday.Add(slot.Start);
-            Fire(slot, settings);
+
+            // 这里**不能 return**：同一分钟有好几个时间点（不同项目分两行写）时，
+            // 一 return 就只弹第一个，后面的永远轮不到。
+            Enter(slot, settings);
+        }
+    }
+
+    /// <summary>进入一个时间点：按设置的形式提醒，时间段还要记下来等 End 到了关窗。</summary>
+    private void Enter(DutySlot slot, DutySettings settings)
+    {
+        if (slot.IsRange)
+        {
+            _activeRanges.Add((slot.Start, slot.End!.Value));
+        }
+
+        Fire(slot, settings);
+    }
+
+    /// <summary>
+    /// 到点的段落关窗。
+    /// </summary>
+    /// <remarks>
+    /// <b>这条不看关闭方式设置。</b><c>End</c> 属于值日表内容（「这个时间段有人值日」），
+    /// 不是用户主动关提醒的动作——用户两项都不勾表示「别自己消失、别被误触关掉」，
+    /// 不是「把提醒永远钉在屏幕上」。时段本来就给出了明确的结束时间。
+    /// </remarks>
+    private void LeaveFinishedRanges(TimeSpan target)
+    {
+        if (_activeRanges.Count == 0)
+        {
             return;
         }
+
+        List<(TimeSpan Start, TimeSpan End)>? finished = null;
+        foreach (var range in _activeRanges)
+        {
+            // 过了 End 就算结束。这里不设上限，哪怕中途电脑睡了一觉，
+            // 醒来后也该把「早就该关的」那个时段收掉，而不是让它一直挂着。
+            if (target >= range.End)
+            {
+                (finished ??= []).Add(range);
+            }
+        }
+
+        if (finished is null)
+        {
+            return;
+        }
+
+        foreach (var range in finished)
+        {
+            _activeRanges.Remove(range);
+        }
+
+        // 只关「为这个时间段开的」那个窗。用户可能中途手动关掉、又弹了另一条提醒，
+        // 这时候把无关的窗一起收掉，就显得插件根本没记住自己开过什么。
+        Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var range in finished)
+            {
+                if (DutyPopupWindow.IsShowing(range.Start))
+                {
+                    DutyPopupWindow.CloseCurrent();
+                }
+
+                if (DutySweepWindow.IsShowing(range.Start))
+                {
+                    DutySweepWindow.CloseCurrent();
+                }
+            }
+        });
     }
 
     /// <summary>
@@ -272,17 +391,34 @@ public class DutyRosterService : IHostedService
 
             if (settings.PlaySound)
             {
-                try
-                {
-                    // 用系统提示音，不额外带音频文件。
-                    Console.Beep();
-                }
-                catch (Exception)
-                {
-                    // 有些环境没有蜂鸣器，忽略。
-                }
+                PlayChime();
             }
         });
+    }
+
+    /// <summary>
+    /// 播一声系统提示音。
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Console.Beep()"/> 在非 Windows 平台上是空实现或直接抛
+    /// <see cref="PlatformNotSupportedException"/>，所以先判平台再叫——
+    /// 提醒本身不该因为一声提示音没响出来就整个失败。
+    /// </remarks>
+    private static void PlayChime()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            Console.Beep();
+        }
+        catch (Exception)
+        {
+            // 有些环境没有蜂鸣器，忽略。
+        }
     }
 
     #endregion
@@ -317,7 +453,13 @@ public class DutyRosterService : IHostedService
             pool = slots.ToList();
         }
 
-        var slot = pool.FirstOrDefault(x => x.Start >= DateTime.Now.TimeOfDay) ?? pool[^1];
+        // 优先挑一个正在生效的时间段来预览——这样能看到「一直显示到结束」的实际效果。
+        // 没有正在生效的，再退回「下一个 / 最后一个」的老挑法。
+        var now = DateTime.Now.TimeOfDay;
+        var slot = pool.FirstOrDefault(x => x.IsRange && x.Start <= now && now < x.End!.Value)
+                   ?? pool.FirstOrDefault(x => x.Start >= now)
+                   ?? pool[^1];
+
         var useFullscreen = fullscreen ?? settings.StyleFor(slot) == DutyStyle.Fullscreen;
         ShowPopup(slot, settings, useFullscreen,
             useFullscreen ? settings.SweepTitle : "值日安排（预览）");

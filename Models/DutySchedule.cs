@@ -13,16 +13,30 @@ public sealed record DutyItem(string Project, IReadOnlyList<string> People)
 }
 
 /// <summary>一个值日时间点。</summary>
-/// <param name="Start">提醒时间。</param>
+/// <param name="Start">开始提醒的时间。</param>
+/// <param name="End">
+/// 结束时间。为 <c>null</c> 表示只有开始这一个时刻：提醒弹出来以后按「停留秒数」自己消失。
+/// 有值时提醒会一直显示到这一刻。
+/// </param>
 /// <param name="Items">这个时间点要做的事。</param>
 /// <remarks>
-/// 只有开始时间，没有结束时间——提醒就发生在这一个点上。
-/// 名单里写成 <c>08:40-08:50</c> 也能解析，但后半截会被忽略：
-/// 那是原来那份数据为了迁就别的软件才带上的，对提醒没有意义。
+/// 名单里写 <c>08:40</c> 是老写法（单时刻），写 <c>08:40-08:50</c> 是新写法（时间段）。
+/// <para/>
+/// <b>必须保持不可变。</b>解析器会把同一个实例挂到多个星期下面
+/// （<c>周一~周五</c> 是一份数据被五天共享），任何可写属性都会同时改掉五天。
 /// </remarks>
-public sealed record DutySlot(TimeSpan Start, IReadOnlyList<DutyItem> Items)
+public sealed record DutySlot(TimeSpan Start, TimeSpan? End, IReadOnlyList<DutyItem> Items)
 {
+    /// <summary>开始时间，比如 <c>08:40</c>。只关心「几点提醒」的地方用这个。</summary>
     public string TimeText => $"{Start:hh\\:mm}";
+
+    /// <summary>这个时间点是不是一个时间段。</summary>
+    public bool IsRange => End is { } end && end > Start;
+
+    /// <summary>
+    /// 显示用的时间文字：单时刻是 <c>08:40</c>，时间段是 <c>08:40-08:50</c>。
+    /// </summary>
+    public string RangeText => IsRange ? $"{Start:hh\\:mm}-{End!.Value:hh\\:mm}" : TimeText;
 
     /// <summary>这个时间点一共涉及多少人（去重）。</summary>
     public int PeopleCount => Items.SelectMany(x => x.People).Distinct(StringComparer.Ordinal).Count();

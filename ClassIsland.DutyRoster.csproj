@@ -10,23 +10,37 @@
         <AssemblyName>ClassIsland.DutyRoster</AssemblyName>
         <RootNamespace>ClassIsland.DutyRoster</RootNamespace>
         <Version>1.1.0.0</Version>
-        <!-- 依赖一律用宿主已加载的那份，插件包里不能再带一份，否则同一类型会有两份程序集身份。 -->
+
+        <!--
+          插件要由宿主动态加载，必须打开这个开关，否则依赖仍会按普通库的方式解析。
+        -->
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+
+        <!--
+          依赖一律用宿主已加载的那份，插件包里不能再带一份，否则同一类型会有两份程序集身份。
+          GenerateDependencyFile / GenerateRuntimeConfigurationFiles 关掉也是这个原因：
+          插件目录里出现 .deps.json 或 .runtimeconfig.json 会让宿主误以为它是个独立应用。
+        -->
         <GenerateDependencyFile>false</GenerateDependencyFile>
         <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+        <!-- 构建时顺带产出可直接安装的 .cipx。 -->
+        <CreateCipx>true</CreateCipx>
+        <ClassIslandPluginSdkVersion>2.1.0.1</ClassIslandPluginSdkVersion>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Avalonia" Version="11.3.17" />
-        <PackageReference Include="FluentAvaloniaUI" Version="2.4.1" ExcludeAssets="runtime" />
-        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" ExcludeAssets="runtime" />
-    </ItemGroup>
-
-
-    <ItemGroup>
-        <ProjectReference Include="..\..\ClassIsland.Core\ClassIsland.Core.csproj"
-                          Private="false" ExcludeAssets="runtime" />
+        <!--
+          用官方 Plugin SDK 包，而不是引用 ClassIsland 源码树里的 ClassIsland.Core.csproj。
+          原来那行 ProjectReference 指向 ..\..\ClassIsland.Core\，意味着这个仓库必须被放进
+          ClassIsland 源码树的 plugins\ 目录下才编译得起来——任何人单独 clone 都会失败。
+          PluginSdk 会传递带来 ClassIsland.Core 与 Avalonia 的正确版本，插件不再自己钉版本号。
+        -->
+        <PackageReference Include="ClassIsland.PluginSdk" Version="$(ClassIslandPluginSdkVersion)">
+            <ExcludeAssets>runtime; native</ExcludeAssets>
+        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>
