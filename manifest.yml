@@ -8,7 +8,8 @@ author: GordonYoung
 icon: icon.png
 url: https://github.com/Gordonynh/DutyRoster
 readme: README.md
+# 只在 Windows 上声明。浮窗的置顶重申（TopmostEnforcer）和「点屏幕任意位置关闭」
+# （GlobalClickWatcher）都直接调用 user32.dll，别的平台跑不起来——
+# 声明成支持反而是对用户撒谎，安装时会收到不该有的兼容性保证。
 supportedOSPlatforms:
   - Windows
-  - Linux
-  - OSX

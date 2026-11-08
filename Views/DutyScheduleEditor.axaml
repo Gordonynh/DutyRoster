@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
+             x:Class="ClassIsland.DutyRoster.Views.DutyScheduleEditor">
+    <StackPanel Spacing="10">
+
+        <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                   Text="在这里直接改值日表，改完点最下面的「保存到文件」才真正写入；不点保存，文件不会被改动。"/>
+
+        <!-- 批次 -->
+        <controls:SettingsExpander IsExpanded="True"
+                                   Header="要编辑的批次"
+                                   Description="值日表可以分成多个 [批次]，按「轮换周期」轮流值日。这里选择要修改的那一批。">
+            <controls:SettingsExpander.Footer>
+                <ComboBox MinWidth="200" VerticalAlignment="Center"
+                          ItemsSource="{Binding GroupNames}"
+                          SelectedIndex="{Binding GroupIndex, Mode=TwoWay}"/>
+            </controls:SettingsExpander.Footer>
+        </controls:SettingsExpander>
+
+        <!-- 星期 -->
+        <controls:SettingsExpander IsExpanded="True"
+                                   Header="哪些天值日"
+                                   Description="勾选的天共用下面这一份时间点。只勾一天就只改那一天；勾「周一~周五」这样连续几天，它们的内容完全相同。">
+            <controls:SettingsExpander.Footer>
+                <StackPanel Spacing="8" MinWidth="380">
+                    <ItemsControl ItemsSource="{Binding DayOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" ItemSpacing="14" LineSpacing="6"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Name}"
+                                          IsThreeState="False"
+                                          FontSize="13"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="l-instructive" TextWrapping="Wrap" Text="{Binding SelectionHint}"/>
+                </StackPanel>
+            </controls:SettingsExpander.Footer>
+        </controls:SettingsExpander>
+
+        <!-- 时间点 -->
+        <controls:SettingsExpander IsExpanded="True"
+                                   Header="时间点"
+                                   Description="一行就是一个提醒时间。开始时间必填；结束时间留空表示单时刻（按「弹窗停留」消失），填了表示时段（一直显示到结束）。">
+            <controls:SettingsExpander.Footer>
+                <StackPanel Spacing="8" MinWidth="560">
+
+                    <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                               Text="项目和负责人用分号「；」分隔，一一对应。例如项目写「擦黑板；倒垃圾」，负责人写「张三；李四」，就表示张三擦黑板、李四倒垃圾。"/>
+
+                    <Grid ColumnDefinitions="132,132,*,*,46" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="l-instructive" Text="开始"/>
+                        <TextBlock Grid.Column="1" Classes="l-instructive" Text="结束（可空）"/>
+                        <TextBlock Grid.Column="2" Classes="l-instructive" Text="项目"/>
+                        <TextBlock Grid.Column="3" Classes="l-instructive" Text="负责人"/>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="132,132,*,*,46" ColumnSpacing="8" Margin="0 0 0 6">
+                                    <TimePicker Grid.Column="0" MinWidth="120" VerticalAlignment="Center"
+                                                ClockIdentifier="24HourClock" UseSeconds="False" MinuteIncrement="1"
+                                                SelectedTime="{Binding StartTime, Mode=TwoWay}"/>
+                                    <TimePicker Grid.Column="1" MinWidth="120" VerticalAlignment="Center"
+                                                ClockIdentifier="24HourClock" UseSeconds="False" MinuteIncrement="1"
+                                                SelectedTime="{Binding EndTime, Mode=TwoWay}"/>
+                                    <TextBox Grid.Column="2" VerticalAlignment="Center" FontSize="13"
+                                             Watermark="擦黑板；倒垃圾"
+                                             Text="{Binding Project, Mode=TwoWay}"/>
+                                    <TextBox Grid.Column="3" VerticalAlignment="Center" FontSize="13"
+                                             Watermark="张三；李四"
+                                             Text="{Binding People, Mode=TwoWay}"/>
+                                    <Button Grid.Column="4" Content="删" FontSize="13"
+                                            Padding="0" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Click="OnRemoveSlot"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Classes="l-instructive" TextWrapping="Wrap"
+                               IsVisible="{Binding HasNoSlots}"
+                               Text="还没勾选星期，或者这些天还没有时间点。点下面的「添加时间点」开始。"/>
+
+                    <TextBlock Foreground="#E04F4F" TextWrapping="Wrap"
+                               IsVisible="{Binding HasValidationError}"
+                               Text="{Binding ValidationText}"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0 4 0 0">
+                        <Button Click="OnAddSlot">添加时间点</Button>
+                        <Button Click="OnReloadFromFile">放弃修改并重新载入</Button>
+                    </StackPanel>
+                </StackPanel>
+            </controls:SettingsExpander.Footer>
+        </controls:SettingsExpander>
+
+        <!-- 保存 -->
+        <controls:SettingsExpander IsExpanded="True"
+                                   Header="保存到文件"
+                                   Description="只有点这里才会写文件。用记事本改文件、改上面的设置，都不会触发写回。">
+            <controls:SettingsExpander.Footer>
+                <StackPanel Spacing="8" MinWidth="560">
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Click="OnRequestSave" IsEnabled="{Binding CanSave}">保存到文件</Button>
+                        <TextBlock Classes="l-instructive" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Text="{Binding RosterPathText}"/>
+                    </StackPanel>
+
+                    <controls:InfoBar Severity="Warning"
+                                      Title="保存会重写整个值日表文件"
+                                      Message="会按现在这份编辑结果重新生成文件：手写的注释、空行和排版会丢失，内容相同的连续星期会合并成「周一~周五」这样的写法。原文件会先备份成「值日表.txt.bak」。确定要继续吗？"
+                                      IsOpen="{Binding IsConfirmingSave}"
+                                      IsClosable="False">
+                        <controls:InfoBar.ActionButton>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Click="OnConfirmSave">确认重写</Button>
+                                <Button Click="OnCancelSave">取消</Button>
+                            </StackPanel>
+                        </controls:InfoBar.ActionButton>
+                    </controls:InfoBar>
+
+                    <controls:InfoBar Severity="Success"
+                                      Title="已保存"
+                                      Message="{Binding SaveResultText}"
+                                      IsOpen="{Binding HasSaveResult}"
+                                      IsClosable="False"/>
+
+                    <controls:InfoBar Severity="Error"
+                                      Title="保存失败"
+                                      Message="{Binding SaveErrorText}"
+                                      IsOpen="{Binding HasSaveError}"
+                                      IsClosable="False"/>
+                </StackPanel>
+            </controls:SettingsExpander.Footer>
+        </controls:SettingsExpander>
+
+    </StackPanel>
+</UserControl>

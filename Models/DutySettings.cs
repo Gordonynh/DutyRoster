@@ -59,7 +59,13 @@ public partial class DutySettings : ObservableObject
     /// <summary>提前几分钟提醒。0 = 到点提醒。</summary>
     [ObservableProperty] private int _leadMinutes;
 
-    /// <summary>弹窗停留秒数。到点自动消失；点屏幕任意位置也会立刻关掉。</summary>
+    /// <summary>
+    /// 弹窗停留秒数。
+    /// </summary>
+    /// <remarks>
+    /// <b>只对没有结束时间的单时刻时间点生效。</b>值日表里写成 <c>08:40-08:50</c> 的时间段
+    /// 由结束时间决定关窗时机，不看这一项。
+    /// </remarks>
     [ObservableProperty] private int _holdSeconds = 17;
 
     /// <summary>
@@ -123,6 +129,53 @@ public partial class DutySettings : ObservableObject
 
     /// <summary>弹窗时是否播一声提示音。</summary>
     [ObservableProperty] private bool _playSound = true;
+
+    #region 关闭方式
+
+    /// <summary>
+    /// 点击空白处或按任意键就关掉提醒。
+    /// </summary>
+    /// <remarks>
+    /// 卡片浮窗靠全局鼠标钩子听「别处的点击」，整屏提醒靠窗口自己的鼠标和键盘事件——
+    /// 两边路径不同，但用户眼里是同一件事，所以共用一个开关。
+    /// </remarks>
+    [ObservableProperty] private bool _closeOnClickAnywhere = true;
+
+    /// <summary>显示右上角的关闭按钮。</summary>
+    [ObservableProperty] private bool _closeWithButton;
+
+    /// <summary>用户能不能靠点击关掉提醒。</summary>
+    [JsonIgnore]
+    public bool CanCloseByClick => CloseOnClickAnywhere;
+
+    /// <summary>用户能不能靠按钮关掉提醒。</summary>
+    [JsonIgnore]
+    public bool CanCloseByButton => CloseWithButton;
+
+    /// <summary>
+    /// 用户有任何一种关闭手段吗。
+    /// </summary>
+    /// <remarks>
+    /// 两项都不勾就是「不可关闭」：不装全局钩子、不画按钮、单时刻的弹窗也不启动自动消失。
+    /// 这时只剩两条退路——Esc（两个窗口都装）和时段自己到期。
+    /// </remarks>
+    [JsonIgnore]
+    public bool CanCloseByUser => CanCloseByClick || CanCloseByButton;
+
+    // 派生属性本身没有存储，源属性一变就得替它们发通知，否则绑定上去的文字不会更新。
+    partial void OnCloseOnClickAnywhereChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanCloseByClick));
+        OnPropertyChanged(nameof(CanCloseByUser));
+    }
+
+    partial void OnCloseWithButtonChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanCloseByButton));
+        OnPropertyChanged(nameof(CanCloseByUser));
+    }
+
+    #endregion
 
     #region 读写
 
